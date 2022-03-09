@@ -103,29 +103,46 @@ class ViewController: UIViewController {
         navigateToA.addAction(UIAction { [weak self] _ in self?.viewStore.send(.openA) }, for: .touchUpInside)
         navigateToB.addAction(UIAction { [weak self] _ in self?.viewStore.send(.openB) }, for: .touchUpInside)
 
-        store.scope(state: \.route?.featureAState, action: AppAction.featureA)
-            .ifLet(
-                then: { [weak self] in
-                    print(">>> featureA scope then")
-                    self?.present(ViewControllerA(store: $0), animated: true)
-                },
-                else: {
-                    print(">>> featureA scope else")
+        let present: (UIViewController) -> Void = { [weak self] viewController in
+            guard let self = self else { return }
+            
+            guard self.presentedViewController != nil else {
+                self.present(viewController, animated: true)
+                return
+            }
+            
+            self.dismiss(animated: true, completion: { self.present(viewController, animated: true) })
+        }
+
+        viewStore.publisher.route
+            .removeDuplicates()
+            .sink { [weak self] in
+                
+                guard let self = self else { return }
+                
+                guard let route = $0 else {
+                    if self.presentedViewController != nil, self.presentedViewController?.isBeingDismissed == false {
+                        self.dismiss(animated: true)
+                    }
+                    return
                 }
-            )
-            .store(in: &cancellables)
-        
-        store.scope(state: \.route?.featureBState, action: AppAction.featureB)
-            .ifLet(
-                then: { [weak self] in
-                    print(">>> featureB scope then")
-                    self?.present(ViewControllerB(store: $0), animated: true)
-                },
-                else: {
-                    print(">>> featureB scope else")
+                                
+                switch route {
+                case .featureA(let state):
+                    let store = self.store.scope(
+                        state: { $0.route?.featureAState ?? state },
+                        action: AppAction.featureA
+                    )
+                    present(ViewControllerA(store: store))
+                    
+                case .featureB(let state):
+                    let store = self.store.scope(
+                        state: { $0.route?.featureBState ?? state },
+                        action: AppAction.featureB
+                    )
+                    present(ViewControllerB(store: store))
                 }
-            )
+            }
             .store(in: &cancellables)
     }
 }
-

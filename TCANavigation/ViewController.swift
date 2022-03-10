@@ -29,12 +29,25 @@ enum Route: Equatable {
             return nil
         }
     }
+    
+    static func isDuplicate(lhs: Route?, rhs: Route?) -> Bool {
+        
+        switch (lhs, rhs) {
+        case (nil, nil),
+            (.featureA, .featureA),
+            (.featureB, .featureB):
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 enum AppAction: Equatable {
     
     case openA
     case openB
+    case dismissed(Route)
     case featureA(FeatureAAction)
     case featureB(FeatureBAction)
 }
@@ -43,19 +56,9 @@ struct AppEnvironment {
     
 }
 
-let appReducer = Reducer<AppState, AppAction, AppEnvironment> { state, action, environment in
-    
-    switch action {
-    case .openA:
-        state.route = .featureA(FeatureAState())
-        return .none
-    case .openB:
-        state.route = .featureB(FeatureBState())
-        return .none
-    }
-}
-.combined(
-    with: featureAReducer
+let appReducer = Reducer<AppState, AppAction, AppEnvironment>.combine(
+
+    featureAReducer
         .pullback(
             state: /Route.featureA,
             action: /AppAction.featureA,
@@ -66,10 +69,9 @@ let appReducer = Reducer<AppState, AppAction, AppEnvironment> { state, action, e
             state: \.route,
             action: /AppAction.self,
             environment: { $0 }
-        )
-)
-.combined(
-    with: featureBReducer
+        ),
+    
+    featureBReducer
         .pullback(
             state: /Route.featureB,
             action: /AppAction.featureB,
@@ -80,9 +82,30 @@ let appReducer = Reducer<AppState, AppAction, AppEnvironment> { state, action, e
             state: \.route,
             action: /AppAction.self,
             environment: { $0 }
-        )
+        ),
+    
+    Reducer { state, action, environment in
+        
+        switch action {
+        case .openA:
+            state.route = .featureA(FeatureAState())
+            return .none
+        case .openB:
+            state.route = .featureB(FeatureBState())
+            return .none
+        case .dismissed(let route) where Route.isDuplicate(lhs: route, rhs: state.route):
+            state.route = nil
+            return .none
+        case .dismissed:
+            return .none
+        case .featureA:
+            return .none
+        case .featureB:
+            return .none
+        }
+    }
 )
-
+.debug()
 
 class ViewController: UIViewController {
 
@@ -115,7 +138,7 @@ class ViewController: UIViewController {
         }
 
         viewStore.publisher.route
-            .removeDuplicates()
+            .removeDuplicates(by: Route.isDuplicate)
             .sink { [weak self] in
                 
                 guard let self = self else { return }
@@ -133,14 +156,22 @@ class ViewController: UIViewController {
                         state: { $0.route?.featureAState ?? state },
                         action: AppAction.featureA
                     )
-                    present(ViewControllerA(store: store))
+                    let viewController = ViewControllerA(
+                        store: store,
+                        onDismiss: { [weak self] in self?.viewStore.send(.dismissed(route)) }
+                    )
+                    present(viewController)
                     
                 case .featureB(let state):
                     let store = self.store.scope(
                         state: { $0.route?.featureBState ?? state },
                         action: AppAction.featureB
                     )
-                    present(ViewControllerB(store: store))
+                    let viewController = ViewControllerB(
+                        store: store,
+                        onDismiss: { [weak self] in self?.viewStore.send(.dismissed(route)) }
+                    )
+                    present(viewController)
                 }
             }
             .store(in: &cancellables)

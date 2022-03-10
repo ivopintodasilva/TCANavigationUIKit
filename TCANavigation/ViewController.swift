@@ -57,32 +57,6 @@ struct AppEnvironment {
 }
 
 let appReducer = Reducer<AppState, AppAction, AppEnvironment>.combine(
-
-    featureAReducer
-        .pullback(
-            state: /Route.featureA,
-            action: /AppAction.featureA,
-            environment: { _ in FeatureAEnvironment() }
-        )
-        .optional()
-        .pullback(
-            state: \.route,
-            action: /AppAction.self,
-            environment: { $0 }
-        ),
-    
-    featureBReducer
-        .pullback(
-            state: /Route.featureB,
-            action: /AppAction.featureB,
-            environment: { _ in FeatureBEnvironment() }
-        )
-        .optional()
-        .pullback(
-            state: \.route,
-            action: /AppAction.self,
-            environment: { $0 }
-        ),
     
     Reducer { state, action, environment in
         
@@ -103,7 +77,33 @@ let appReducer = Reducer<AppState, AppAction, AppEnvironment>.combine(
         case .featureB:
             return .none
         }
-    }
+    },
+    
+    featureAReducer
+        .pullback(
+            state: /Route.featureA,
+            action: /FeatureAAction.self,
+            environment: { $0 }
+        )
+        .optional()
+        .pullback(
+            state: \.route,
+            action: /AppAction.featureA,
+            environment: { appEnvironment in FeatureAEnvironment() }
+        ),
+    
+    featureBReducer
+        .pullback(
+            state: /Route.featureB,
+            action: /FeatureBAction.self,
+            environment: { $0 }
+        )
+        .optional()
+        .pullback(
+            state: \.route,
+            action: /AppAction.featureB,
+            environment: { appEnvironment in FeatureBEnvironment() }
+        )
 )
 .debug()
 

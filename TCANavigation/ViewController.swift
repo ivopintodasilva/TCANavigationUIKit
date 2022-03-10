@@ -7,7 +7,11 @@ struct AppState: Equatable {
     var route: Route?
 }
 
-enum Route: Equatable {
+struct FeatureARouteID: Hashable {}
+
+struct FeatureBRouteID: Hashable {}
+
+enum Route: Equatable, Identifiable {
     
     case featureA(FeatureAState)
     case featureB(FeatureBState)
@@ -30,15 +34,12 @@ enum Route: Equatable {
         }
     }
     
-    static func isDuplicate(lhs: Route?, rhs: Route?) -> Bool {
-        
-        switch (lhs, rhs) {
-        case (nil, nil),
-            (.featureA, .featureA),
-            (.featureB, .featureB):
-            return true
-        default:
-            return false
+    var id: AnyHashable {
+        switch self {
+        case .featureA:
+            return FeatureARouteID()
+        case .featureB:
+            return FeatureBRouteID()
         }
     }
 }
@@ -67,7 +68,7 @@ let appReducer = Reducer<AppState, AppAction, AppEnvironment>.combine(
         case .openB:
             state.route = .featureB(FeatureBState())
             return .none
-        case .dismissed(let route) where Route.isDuplicate(lhs: route, rhs: state.route):
+        case .dismissed(let route) where route.id == state.route?.id:
             state.route = nil
             return .none
         case .dismissed:
@@ -138,7 +139,7 @@ class ViewController: UIViewController {
         }
 
         viewStore.publisher.route
-            .removeDuplicates(by: Route.isDuplicate)
+            .removeDuplicates(by: { $0?.id == $1?.id })
             .sink { [weak self] in
                 
                 guard let self = self else { return }
